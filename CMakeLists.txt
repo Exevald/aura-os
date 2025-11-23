@@ -8,7 +8,6 @@ SET(BUILD_DIR ${CMAKE_BINARY_DIR}/bin)
 FILE(MAKE_DIRECTORY ${BUILD_DIR})
 
 SET(NASM_EXECUTABLE "/usr/local/bin/nasm")
-
 add_custom_command(
         OUTPUT ${BUILD_DIR}/boot.bin
         COMMAND ${NASM_EXECUTABLE} -f bin ${CMAKE_SOURCE_DIR}/bootloader/src/boot.asm -o ${BUILD_DIR}/boot.bin
@@ -18,19 +17,28 @@ add_custom_command(
 add_custom_target(bootloader ALL DEPENDS ${BUILD_DIR}/boot.bin)
 
 SET(KERNEL_ENTRY_OBJECT ${BUILD_DIR}/kernel_entry.o)
-
 add_custom_command(
         OUTPUT ${KERNEL_ENTRY_OBJECT}
         COMMAND ${NASM_EXECUTABLE} -f elf ${CMAKE_SOURCE_DIR}/bootloader/src/kernel.asm -o ${KERNEL_ENTRY_OBJECT}
         DEPENDS ${CMAKE_SOURCE_DIR}/bootloader/src/kernel.asm
         COMMENT "Assembling kernel entry (${KERNEL_ENTRY_OBJECT})"
 )
-add_custom_target(kernel_asm_entry ALL DEPENDS ${KERNEL_ENTRY_OBJECT})
+
+SET(PAGING_ASM_OBJ ${BUILD_DIR}/paging_helpers.o)
+add_custom_command(
+        OUTPUT ${PAGING_ASM_OBJ}
+        COMMAND nasm -f elf ${CMAKE_SOURCE_DIR}/bootloader/src/paging_helpers.asm -o ${PAGING_ASM_OBJ}
+        DEPENDS ${CMAKE_SOURCE_DIR}/bootloader/src/paging_helpers.asm
+)
 
 add_executable(aura_kernel_elf
         ${KERNEL_ENTRY_OBJECT}
+        ${PAGING_ASM_OBJ}
         kernel/kernel.cpp
         lib/console/console.cpp
+        lib/mm/pmm.cpp
+        lib/mm/paging.cpp
+        lib/mm/wsclock.cpp
 )
 
 target_link_options(aura_kernel_elf PRIVATE
@@ -43,12 +51,6 @@ target_link_options(aura_kernel_elf PRIVATE
 set_target_properties(aura_kernel_elf PROPERTIES
         RUNTIME_OUTPUT_NAME "kernel.elf"
         RUNTIME_OUTPUT_DIRECTORY ${BUILD_DIR}
-)
-
-target_sources(aura_kernel_elf PRIVATE
-        ${KERNEL_ENTRY_OBJECT}
-        kernel/kernel.cpp
-        lib/console/console.cpp
 )
 
 add_custom_command(
@@ -74,15 +76,14 @@ find_program(QEMU_EXECUTABLE NAMES qemu-system-i386 qemu-system-x86_64 REQUIRED)
 set(QEMU_DRIVE_CMD
         ${QEMU_EXECUTABLE} -drive file=${BUILD_DIR}/os.img,format=raw,if=floppy,index=0 -boot order=a
 )
-
-add_custom_target(qemu
+add_custom_target(run_aura
         COMMAND ${QEMU_DRIVE_CMD}
         DEPENDS disk_image
         COMMENT "Running Aura OS in QEMU"
 )
 
-add_custom_target(qemu_monitor
+add_custom_target(run_aura_debug
         COMMAND ${QEMU_DRIVE_CMD} -S -monitor stdio
         DEPENDS disk_image
-        COMMENT "Running Aura OS in QEMU with monitor"
+        COMMENT "Running Aura OS in QEMU with registers monitoring"
 )

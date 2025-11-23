@@ -5,10 +5,6 @@ Console::Console()
 	, m_column(0)
 {
 	m_currentColor = MakeColor(White, Blue);
-}
-
-void Console::Init()
-{
 	Clear();
 }
 

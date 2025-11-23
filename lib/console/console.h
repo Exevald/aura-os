@@ -1,8 +1,7 @@
-#ifndef CONSOLE_H
-#define CONSOLE_H
+#pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 class Console
 {
@@ -29,7 +28,6 @@ public:
 
 	Console();
 
-	void Init();
 	void SetColor(Color text, Color background);
 	void Clear();
 	void PutChar(char c);
@@ -47,5 +45,3 @@ private:
 	static uint8_t MakeColor(const Color& foregroundColor, const Color& backgroundColor);
 	static uint16_t MakeVGAEntry(char c, uint8_t color);
 };
-
-#endif // CONSOLE_H
