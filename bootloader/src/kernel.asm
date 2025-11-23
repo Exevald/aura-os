@@ -1,11 +1,11 @@
 [BITS 32]
-
+section .text.entry
 global _start
 extern kernel_main
 
 _start:
     call kernel_main
-.loop:
-    jmp .loop
-
-times 512-($ - $$) db 0
+    cli
+.halt:
+    hlt
+    jmp .halt

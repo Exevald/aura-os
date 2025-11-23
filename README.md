@@ -1,7 +1,7 @@
 # aura-os
 
 ### TODO:
- - [ ] Bootloader
+ - [x] Bootloader
  - [ ] Kernel 
  - [ ] Memory manager
  - [ ] Drivers support

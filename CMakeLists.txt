@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0076 NEW)
-project(aura-os C ASM)
+project(aura-os C CXX ASM)
 
 SET(TARGET_ARCHITECTURE i686-elf)
 
@@ -28,8 +28,9 @@ add_custom_command(
 add_custom_target(kernel_asm_entry ALL DEPENDS ${KERNEL_ENTRY_OBJECT})
 
 add_executable(aura_kernel_elf
-        kernel/kernel.c
         ${KERNEL_ENTRY_OBJECT}
+        kernel/kernel.cpp
+        lib/console/console.cpp
 )
 
 target_link_options(aura_kernel_elf PRIVATE
@@ -42,6 +43,12 @@ target_link_options(aura_kernel_elf PRIVATE
 set_target_properties(aura_kernel_elf PROPERTIES
         RUNTIME_OUTPUT_NAME "kernel.elf"
         RUNTIME_OUTPUT_DIRECTORY ${BUILD_DIR}
+)
+
+target_sources(aura_kernel_elf PRIVATE
+        ${KERNEL_ENTRY_OBJECT}
+        kernel/kernel.cpp
+        lib/console/console.cpp
 )
 
 add_custom_command(
@@ -64,26 +71,18 @@ add_custom_target(disk_image ALL DEPENDS ${BUILD_DIR}/os.img)
 
 find_program(QEMU_EXECUTABLE NAMES qemu-system-i386 qemu-system-x86_64 REQUIRED)
 
+set(QEMU_DRIVE_CMD
+        ${QEMU_EXECUTABLE} -drive file=${BUILD_DIR}/os.img,format=raw,if=floppy,index=0 -boot order=a
+)
+
 add_custom_target(qemu
-        COMMAND ${QEMU_EXECUTABLE} -drive file=${BUILD_DIR}/os.img,format=raw,if=floppy,index=0 -boot order=a
+        COMMAND ${QEMU_DRIVE_CMD}
         DEPENDS disk_image
-        COMMENT "Running Aura OS in QEMU (1.44 MB floppy)"
-)
-
-add_custom_target(qemu_nographic
-        COMMAND ${QEMU_EXECUTABLE} -fda ${BUILD_DIR}/os.img -nographic -boot a
-        DEPENDS disk_image
-        COMMENT "Running Aura OS in QEMU (text-only, no graphics)"
-)
-
-add_custom_target(qemu_debug
-        COMMAND ${QEMU_EXECUTABLE} -fda ${BUILD_DIR}/os.img -s -S -boot a
-        DEPENDS disk_image
-        COMMENT "Running Aura OS in QEMU with GDB stub (-s -S)"
+        COMMENT "Running Aura OS in QEMU"
 )
 
 add_custom_target(qemu_monitor
-        COMMAND ${QEMU_EXECUTABLE} -fda ${BUILD_DIR}/os.img -S -monitor stdio -boot a
+        COMMAND ${QEMU_DRIVE_CMD} -S -monitor stdio
         DEPENDS disk_image
-        COMMENT "Running Aura OS in QEMU with monitor and paused CPU"
+        COMMENT "Running Aura OS in QEMU with monitor"
 )
