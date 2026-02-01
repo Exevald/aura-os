@@ -6,14 +6,18 @@
 
 extern "C" void loadPageDirectory(uint32_t*);
 extern "C" void enablePaging();
+extern "C" void flushTLB();
 
 alignas(4096) PageDirectory kernelDirectory;
 alignas(4096) PageTable firstPageTable;
+alignas(4096) PageTable heapPageTable;
 
 void VirtualMemoryManager::Init()
 {
 	memset(&kernelDirectory, 0, sizeof(PageDirectory));
 	memset(&firstPageTable, 0, sizeof(PageTable));
+	memset(&heapPageTable, 0, sizeof(PageTable));
+	WSClockManager::Init();
 
 	for (int i = 0; i < 1024; i++)
 	{
@@ -22,9 +26,13 @@ void VirtualMemoryManager::Init()
 		firstPageTable.pages[i].rw = 1;
 	}
 
-	kernelDirectory.tables[0].table_addr = reinterpret_cast<uint32_t>(&firstPageTable) >> 12;
+	kernelDirectory.tables[0].tableAddr = reinterpret_cast<uintptr_t>(&firstPageTable) >> 12;
 	kernelDirectory.tables[0].present = 1;
 	kernelDirectory.tables[0].rw = 1;
+
+	kernelDirectory.tables[1].tableAddr = reinterpret_cast<uintptr_t>(&heapPageTable) >> 12;
+	kernelDirectory.tables[1].present = 1;
+	kernelDirectory.tables[1].rw = 1;
 
 	loadPageDirectory(reinterpret_cast<uint32_t*>(&kernelDirectory));
 	enablePaging();
@@ -32,44 +40,60 @@ void VirtualMemoryManager::Init()
 
 bool VirtualMemoryManager::MapPage(const uint32_t virtualAddress)
 {
-	const uint32_t pageDirectoryIndex = virtualAddress >> 22;
-	const uint32_t pageTableIndex = (virtualAddress >> 12) & 0x03FF;
+	const uint32_t pdIdx = virtualAddress >> 22;
+	const uint32_t ptIdx = (virtualAddress >> 12) & 0x03FF;
 
-	if (pageDirectoryIndex != 0)
+	PageTable* targetTable = nullptr;
+	if (pdIdx == 0)
+	{
+		targetTable = &firstPageTable;
+	}
+	else if (pdIdx == 1)
+	{
+		targetTable = &heapPageTable;
+	}
+	else
 	{
 		return false;
 	}
 
-	auto frame = PMM::AllocateFrame();
-	if (frame == -1)
+	if (targetTable->pages[ptIdx].present)
+	{
+		return true;
+	}
+
+	uint32_t frame = PMM::AllocateFrame();
+	if (frame == (uint32_t)-1)
 	{
 		PerformPageReplacement();
 		frame = PMM::AllocateFrame();
-		if (frame == -1)
+		if (frame == (uint32_t)-1)
 		{
 			return false;
 		}
 	}
 
-	firstPageTable.pages[pageTableIndex].frame = frame;
-	firstPageTable.pages[pageTableIndex].present = 1;
-	firstPageTable.pages[pageTableIndex].rw = 1;
-	firstPageTable.pages[pageTableIndex].accessed = 1;
-	firstPageTable.pages[pageTableIndex].dirty = 0;
+	targetTable->pages[ptIdx].frame = frame;
+	targetTable->pages[ptIdx].present = 1;
+	targetTable->pages[ptIdx].rw = 1;
 
 	return true;
 }
 
 void VirtualMemoryManager::PerformPageReplacement()
 {
-	if (auto victim = WSClockManager::FindVictimPage(&firstPageTable); victim != -1)
+	uint32_t victimVA = WSClockManager::FindVictimPage(&kernelDirectory);
+
+	if (victimVA != (uint32_t)-1)
 	{
-		PTE& page = firstPageTable.pages[victim];
+		uint32_t pdIdx = victimVA >> 22;
+		uint32_t ptIdx = (victimVA >> 12) & 0x03FF;
+
+		PageTable* table = (pdIdx == 0) ? &firstPageTable : &heapPageTable;
+		PTE& page = table->pages[ptIdx];
+
 		PMM::FreeFrame(page.frame);
-
 		page.present = 0;
-		page.available = 1;
-
-		__asm__ volatile("mov %%cr3, %%eax; mov %%eax, %%cr3" ::: "eax", "memory");
+		flushTLB();
 	}
 }

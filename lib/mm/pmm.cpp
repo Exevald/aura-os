@@ -1,7 +1,7 @@
 #include "pmm.h"
 #include "../utils/utils.h"
 
-uint32_t PMM::m_framesBitmap[PMM::BITMAP_SIZE];
+uint32_t PMM::m_framesBitmap[BITMAP_SIZE];
 
 void PMM::Init(const uint32_t kernelEndAddress)
 {

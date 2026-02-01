@@ -1,62 +1,65 @@
 #include "wsclock.h"
 #include "../utils/timer.h"
 
-PageMetadata WSClockManager::m_metadata[1024];
-uint32_t WSClockManager::m_hand = 0;
+PageMetadata WSClockManager::m_metadata[2048];
+uint32_t WSClockManager::m_globalHand = 0;
 constexpr uint32_t TAU = 50;
 
 void WSClockManager::Init()
 {
-	m_hand = 0;
-	for (auto& [lastAccessTime] : m_metadata)
+	m_globalHand = 0;
+	for (auto& i : m_metadata)
 	{
-		lastAccessTime = 0;
+		i.lastAccessTime = 0;
 	}
 }
 
-uint32_t WSClockManager::FindVictimPage(PageTable* table)
+uint32_t WSClockManager::FindVictimPage(PageDirectory* dir)
 {
-	const uint32_t startHand = m_hand;
-	const uint32_t currentTimestamp = Timer::GetTime();
+	uint32_t startHand = m_globalHand;
+	uint32_t currentTimestamp = Timer::GetTime();
 
 	do
 	{
-		if (PTE& pte = table->pages[m_hand]; pte.present)
+		uint32_t tableIdx = m_globalHand / 1024;
+		uint32_t pageIdx = m_globalHand % 1024;
+
+		if (dir->tables[tableIdx].present)
 		{
-			if (pte.accessed)
+			auto* table = (PageTable*)(dir->tables[tableIdx].tableAddr << 12);
+			PTE& pte = table->pages[pageIdx];
+
+			bool isKernelCore = (tableIdx == 0 && pageIdx < 256);
+
+			if (pte.present && !isKernelCore)
 			{
-				pte.accessed = 0;
-				m_metadata[m_hand].lastAccessTime = currentTimestamp;
-			}
-			else
-			{
-				if (const uint32_t age = currentTimestamp - m_metadata[m_hand].lastAccessTime; age > TAU)
+				if (pte.accessed)
 				{
-					if (pte.dirty)
+					pte.accessed = 0;
+					m_metadata[m_globalHand].lastAccessTime = currentTimestamp;
+				}
+				else
+				{
+					uint32_t age = currentTimestamp - m_metadata[m_globalHand].lastAccessTime;
+					if (age > TAU)
 					{
-						pte.dirty = 0;
-						m_metadata[m_hand].lastAccessTime = currentTimestamp;
-					}
-					else
-					{
-						const auto victim = m_hand;
-						m_hand++;
-						if (m_hand >= 1024)
+						if (!pte.dirty)
 						{
-							m_hand = 0;
+							uint32_t victimVirtualAddress = m_globalHand * 4096;
+
+							m_globalHand = (m_globalHand + 1) % 2048;
+							return victimVirtualAddress;
 						}
-						return victim;
+						else
+						{
+							pte.dirty = 0;
+						}
 					}
 				}
 			}
 		}
+		m_globalHand = (m_globalHand + 1) % 2048;
+	} while (m_globalHand != startHand);
 
-		m_hand++;
-		if (m_hand >= 1024)
-		{
-			m_hand = 0;
-		}
-	} while (m_hand != startHand);
-
-	return -1;
+	return (uint32_t)-1;
 }

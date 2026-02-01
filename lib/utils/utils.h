@@ -1,13 +1,9 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
-inline void* memset(void* ptr, const int value, size_t num)
-{
-	auto p = static_cast<unsigned char*>(ptr);
-	while (num--)
-	{
-		*p++ = static_cast<unsigned char>(value);
-	}
-	return ptr;
+extern "C" {
+void* memcpy(void* dest, const void* src, size_t n);
+void* memset(void* s, int c, size_t n);
 }

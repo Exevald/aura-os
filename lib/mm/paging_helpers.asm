@@ -1,6 +1,7 @@
 [BITS 32]
 global loadPageDirectory
 global enablePaging
+global flushTLB
 
 loadPageDirectory:
     push ebp
@@ -19,4 +20,9 @@ enablePaging:
     mov cr0, eax
     mov esp, ebp
     pop ebp
+    ret
+
+flushTLB:
+    mov eax, cr3
+    mov cr3, eax
     ret
